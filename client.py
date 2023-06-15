@@ -10,6 +10,22 @@ import schedule
 import subprocess
 
 
+def find_local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    # Connect the socket to a remote address (doesn't matter what address)
+    s.connect(("8.8.8.8", 80))
+
+    # Get the local IP address of the socket
+    local_ip_address = s.getsockname()[0]
+
+    # Close the socket
+    s.close()
+
+    print("Local IP address:", local_ip_address)
+    return local_ip_address
+
+
 def send_heartbeat():
     second_send("I'm up!")
     print("up")
@@ -33,7 +49,7 @@ def schedule_heartbeat():
 
 
 header = 16384
-server_ip = '192.168.239.170'
+server_ip = find_local_ip()
 port = 4440
 second_port = port + 1
 disconnect_message = "!DISCONNECT"
@@ -144,8 +160,10 @@ while True:
 
                     output = proc.stdout.read() + proc.stderr.read()
                     print(output)
-                    client.send(output)
-
+                    if output == b'':
+                        client.send("NO OUTPUT".encode("utf-8"))
+                    else:
+                        client.send(output)
 
         if command == "DISCONNECT":
             send(disconnect_message)
